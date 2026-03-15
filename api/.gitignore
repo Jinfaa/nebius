@@ -47,3 +47,8 @@ htmlcov/
 *.log
 .tmp/
 test_output.log
+
+# Environment variables
+.env
+.env.*
+!.env.example

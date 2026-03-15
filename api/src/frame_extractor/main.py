@@ -1,6 +1,10 @@
 """FastAPI application for video frame extraction."""
 
+import os
 import shutil
+from dotenv import load_dotenv
+
+load_dotenv()
 import tempfile
 from pathlib import Path
 
@@ -13,6 +17,8 @@ from .extractor import iter_frames
 from .similarity import is_similar_cached
 from .archive import build_zip
 from .stitcher import group_and_stitch
+
+_NEBIUS_API_KEY = os.getenv("NEBIUS_API_KEY")
 
 app = FastAPI(
     title="Video Frame Extractor",
@@ -163,7 +169,8 @@ async def stitch_endpoint(
                 detail="No frames extracted from video",
             )
 
-        pages = group_and_stitch(all_frames, scene_threshold=threshold, api_key=nebius_api_key)
+        api_key = nebius_api_key or _NEBIUS_API_KEY
+        pages = group_and_stitch(all_frames, scene_threshold=threshold, api_key=api_key)
 
         output_dir = tmp_dir / "pages"
         output_dir.mkdir()
