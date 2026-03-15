@@ -192,14 +192,22 @@ function ChatContent() {
                     }));
                     setPages(newPages);
                   }
-                  if (data.plan) {
-                    setPlan(data.plan);
-                  }
-                  if (data.xml) {
-                    setXml(data.xml);
-                  }
-                  setMessages((prev) => [...prev, { role: "assistant", content: "✅ Processing complete! You can now chat to generate code." }]);
+                  const completedPlan: PlanData = data.plan ?? { thinking: "", planDescription: "", checklist: [] };
+                  const completedXml: string = data.xml ?? "";
+                  if (data.plan) setPlan(completedPlan);
+                  if (data.xml) setXml(completedXml);
+
+                  const autoMessage: ChatMessage = { role: "user", content: "Implement the plan and create all necessary files." };
+                  setMessages((prev) => [...prev, autoMessage, { role: "assistant", content: "🤖 Generating code..." }]);
                   setIsProcessing(false);
+                  setSending(true);
+
+                  const completedAnalyses: unknown[] = data.analyses ?? [];
+                  streamCodeGeneration([autoMessage], completedPlan, completedXml, completedAnalyses)
+                    .catch((err) => {
+                      setMessages((prev) => [...prev, { role: "assistant", content: `❌ Code generation error: ${err?.message ?? err}` }]);
+                    })
+                    .finally(() => setSending(false));
                 }
               } catch { /* ignore */ }
             }
@@ -219,6 +227,7 @@ function ChatContent() {
       cancelled = true;
       abortController.abort();
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [uploadId]);
 
   useEffect(() => {
@@ -256,6 +265,80 @@ function ChatContent() {
     historyRef.current.scrollTop = historyRef.current.scrollHeight;
   }, [messages]);
 
+  const streamCodeGeneration = useCallback(async (
+    chatMessages: ChatMessage[],
+    planData: PlanData,
+    xmlData: string,
+    analyses?: unknown[],
+  ) => {
+    const backendUrl = (process.env.NEXT_PUBLIC_VIDEO2SITE_API_URL ?? "").replace(/\/$/, "");
+    const res = await fetch(`${backendUrl}/generate-code-streaming`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ messages: chatMessages, plan: planData, xml: xmlData, analyses }),
+    });
+
+    if (!res.ok) return;
+
+    const reader = res.body?.getReader();
+    const decoder = new TextDecoder();
+    if (!reader) return;
+
+    let currentEventType = "";
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      const chunk = decoder.decode(value);
+      const lines = chunk.split("\n");
+
+      for (const line of lines) {
+        if (line.startsWith("event: ")) {
+          currentEventType = line.replace("event: ", "").trim();
+          continue;
+        }
+        if (!line.startsWith("data: ")) continue;
+
+        try {
+          const data = JSON.parse(line.replace("data: ", ""));
+
+          if (currentEventType === "thinking" || currentEventType === "thinking_complete") {
+            if (data.content) {
+              setMessages((prev) => {
+                const last = prev[prev.length - 1];
+                if (last?.role === "thinking") {
+                  return [...prev.slice(0, -1), { ...last, content: last.content + data.content }];
+                }
+                return [...prev, { role: "thinking", content: data.content }];
+              });
+            }
+          } else if (currentEventType === "description" || currentEventType === "description_complete") {
+            if (data.content) {
+              setMessages((prev) => {
+                const last = prev[prev.length - 1];
+                if (last?.role === "assistant") {
+                  return [...prev.slice(0, -1), { ...last, content: last.content + data.content }];
+                }
+                return [...prev, { role: "assistant", content: data.content }];
+              });
+            }
+          } else if (currentEventType === "action") {
+            setMessages((prev) => [...prev, {
+              role: "assistant",
+              content: data.description || "",
+              type: data.type,
+              path: data.path,
+            }]);
+            if (iframeRef.current) {
+              iframeRef.current.src = iframeRef.current.src;
+            }
+          }
+        } catch { /* ignore */ }
+      }
+    }
+  }, [iframeRef]);
+
   const sendMessage = useCallback(async () => {
     const text = input.trim();
     if (!text || sending) return;
@@ -265,93 +348,13 @@ function ChatContent() {
     setSending(true);
     const nextMessages = [...messages, newMessage];
     try {
-      const res = await fetch("/api/write-code", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          messages: nextMessages,
-          plan: plan,
-          xml: xml
-        }),
-      });
-
-      const reader = res.body?.getReader();
-      const decoder = new TextDecoder();
-
-      if (reader) {
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-
-          const chunk = decoder.decode(value);
-          const lines = chunk.split("\n");
-
-          for (const line of lines) {
-            if (line.startsWith("data: ")) {
-              const dataStr = line.replace("data: ", "");
-              try {
-                const data = JSON.parse(dataStr);
-
-                switch (data.type) {
-                  case "thinking":
-                  case "thinking_complete":
-                    setMessages((prev) => {
-                      const last = prev[prev.length - 1];
-                      if (last?.role === "thinking") {
-                        return [...prev.slice(0, -1), {
-                          ...last,
-                          content: last.content + (data.data?.content || ""),
-                        }];
-                      }
-                      return [...prev, {
-                        role: "thinking",
-                        content: data.data?.content || "",
-                      }];
-                    });
-                    break;
-                  case "description":
-                  case "description_complete":
-                    setMessages((prev) => {
-                      const last = prev[prev.length - 1];
-                      if (last?.role === "assistant") {
-                        return [...prev.slice(0, -1), {
-                          ...last,
-                          content: last.content + (data.data?.content || ""),
-                        }];
-                      }
-                      return [...prev, {
-                        role: "assistant",
-                        content: data.data?.content || "",
-                      }];
-                    });
-                    break;
-                  case "action":
-                    setMessages((prev) => [...prev, {
-                      role: "assistant",
-                      content: data.data?.description || "",
-                      type: data.data?.type,
-                      path: data.data?.path,
-                    }]);
-                    
-                    // Refresh iframe
-                    if (iframeRef.current) {
-                      iframeRef.current.src = iframeRef.current.src;
-                    }
-                    break;
-                  case "complete":
-                    break;
-                }
-              } catch { /* ignore */ }
-            }
-          }
-        }
-      }
+      await streamCodeGeneration(nextMessages, plan, xml);
     } catch {
-      // Optional: show error
+      // ignore
     } finally {
       setSending(false);
     }
-  }, [input, messages, sending, plan, xml]);
+  }, [input, messages, sending, plan, xml, streamCodeGeneration]);
 
   const completedCount = plan.checklist?.filter((i) => i.status === "done").length ?? 0;
   const totalCount = plan.checklist?.length ?? 0;

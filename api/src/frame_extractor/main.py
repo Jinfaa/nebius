@@ -982,6 +982,7 @@ async def generate_code_streaming(request: Request):
 
             plan_description = plan.get("planDescription", "")
             checklist = plan.get("checklist", [])
+            analyses = body.get("analyses", [])
 
             context_parts = [
                 f"# Implementation Plan\n\n{plan_description}\n\n",
@@ -993,6 +994,12 @@ async def generate_code_streaming(request: Request):
                     f"- [{status_icon}] [{item.get('category', '')}] {item.get('description', '')}\n"
                 )
 
+            if analyses:
+                import json as _json
+                context_parts.append("\n## UI Analysis (colors, fonts, layout per screen)\n")
+                for i, analysis in enumerate(analyses, 1):
+                    context_parts.append(f"\n### Screen {i}\n```json\n{_json.dumps(analysis, indent=2)}\n```\n")
+
             if xml:
                 context_parts.append(f"\n## XML Plan\n\n{xml}\n")
 
@@ -1003,21 +1010,17 @@ async def generate_code_streaming(request: Request):
 You are Libra, an AI editor for creating and modifying web applications. You help users through chat while making real-time code modifications. Users can view application previews in the left-side iframe while you implement code changes.
 
 ## Tech Stack
-- React 19 and TypeScript 5.8
-- Vite 6.2 build tool
-- shadcn/ui components (based on Radix UI)
-- Tailwind CSS 3.4
+- Next.js 15 with App Router and TypeScript
+- Tailwind CSS for styling
 - lucide-react for icons
 
 ## Project Structure
-- src/
-    - components/: reusable React components
-    - hooks/: custom React hooks
-    - lib/: utilities and configurations
-    - pages/: page components
-    - App.tsx: main application
-    - main.tsx: entry point
-    - index.css: global styles
+- src/app/
+    - page.tsx: main page (home route)
+    - layout.tsx: root layout
+    - globals.css: global styles
+    - [route]/page.tsx: additional routes
+- src/components/: reusable React components
 
 ## Response Format (Absolutely Mandatory)
 
@@ -1052,56 +1055,45 @@ Your response **must strictly follow** this XML structure:
 
             provider = NebiusProvider(api_key)
 
-            yield send_event("thinking", {"content": "", "type": "start"})
-
             full_response = ""
-            thinking_buffer = ""
-            description_buffer = ""
-            action_buffer = ""
-            current_section = None
+            processed_action_spans: set[int] = set()
+            in_think_tag = False
 
-            for chunk in provider.chat(llm_messages, system_prompt=system_prompt):
+            yield send_event("thinking", {"content": "⏳ Starting code generation..."})
+
+            for chunk in provider.chat(llm_messages, system_prompt=system_prompt, max_tokens=32768):
                 full_response += chunk
 
-                thinking_buffer += chunk
-                if "<planDescription>" in thinking_buffer:
-                    if current_section is None or current_section == "thinking":
-                        thinking_part = thinking_buffer.split("<planDescription>")[0]
-                        if "<![CDATA[" in thinking_part:
-                            think_content = thinking_part.split("<![CDATA[")[1]
-                            if "]]>" in think_content:
-                                think_text = think_content.split("]]>")[0]
-                                yield send_event("thinking", {"content": think_text})
-                                current_section = "thinking"
+                # Stream <think>...</think> content (Qwen3 extended thinking)
+                if "<think>" in full_response and not in_think_tag:
+                    in_think_tag = True
+                if in_think_tag and "</think>" not in full_response:
+                    yield send_event("thinking", {"content": chunk})
+                elif in_think_tag and "</think>" in full_response:
+                    in_think_tag = False
 
-                if "<action>" in full_response:
-                    if current_section != "action_started":
-                        yield send_event(
-                            "description_complete",
-                            {"content": description_buffer.strip()},
-                        )
-                        current_section = "action_started"
-
+                # Detect and write completed file actions
                 for match in re.finditer(
-                    r'<action\s+type="file">\s*<file\s+filename="([^"]+)">\s*<!\CDATA\[([^\]]+)\]\]>\s*</file>\s*<description><!\CDATA\[([^\]]+)\]\]></description>\s*</action>',
+                    r'<action\s+type="file">\s*<file\s+filename="([^"]+)">\s*(?:<!\[CDATA\[(.*?)\]\]>|(.*?))\s*</file>\s*<description>(?:<!\[CDATA\[(.*?)\]\]>|(.*?))</description>\s*</action>',
                     full_response,
                     re.DOTALL,
                 ):
+                    if match.start() in processed_action_spans:
+                        continue
+                    processed_action_spans.add(match.start())
+
                     filename = match.group(1)
-                    content = match.group(2)
-                    description = match.group(3)
+                    content = match.group(2) or match.group(3) or ""
+                    description = match.group(4) or match.group(5) or ""
 
                     file_path = Path(_IFRAME_DIR) / filename
                     file_path.parent.mkdir(parents=True, exist_ok=True)
                     file_path.write_text(content)
+                    logger.info(f"Written file: {filename}")
 
                     yield send_event(
                         "action",
-                        {
-                            "type": "file",
-                            "path": filename,
-                            "description": description,
-                        },
+                        {"type": "file", "path": filename, "description": description},
                     )
 
                 for match in re.finditer(
@@ -1110,21 +1102,13 @@ Your response **must strictly follow** this XML structure:
                 ):
                     cmd_type = match.group(1).strip()
                     package = match.group(2).strip()
-
                     yield send_event(
                         "action",
-                        {
-                            "type": "command",
-                            "commandType": cmd_type,
-                            "package": package,
-                        },
+                        {"type": "command", "commandType": cmd_type, "package": package},
                     )
 
+            logger.info(f"Code generation complete. Files written: {len(processed_action_spans)}")
             yield send_event("thinking_complete", {"content": ""})
-            yield send_event(
-                "description_complete",
-                {"content": description_buffer.strip() if description_buffer else ""},
-            )
             yield send_event("complete", {"message": "Code generation complete"})
 
         except HTTPException:
