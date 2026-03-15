@@ -18,24 +18,6 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  if (!existsSync(iframeDir)) {
-    mkdirSync(iframeDir, { recursive: true });
-    execSync(
-      `mkdir -p "${iframeDir}" && ` +
-        `cd "${iframeDir}" && ` +
-        `pnpm create next-app . --typescript --tailwind --app --src-dir --import-alias "@/*" --use-pnpm --yes`,
-    );
-    startIframeDevServer(iframeDir, iframePort);
-    try {
-      await waitForPortReady(iframePort);
-    } catch (err) {
-      const message =
-        err instanceof Error
-          ? err.message
-          : "Iframe dev server failed to start";
-      return NextResponse.json({ error: message }, { status: 502 });
-    }
-  }
 
   const externalFormData = new FormData();
   externalFormData.append("input", file);

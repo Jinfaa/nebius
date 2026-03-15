@@ -421,6 +421,51 @@ async def analyze_and_plan(
             shutil.rmtree(tmp_dir)
 
 
+def _ensure_iframe_dev_server():
+    """Ensure /tmp/site has a Next.js project and dev server running."""
+    import subprocess as _sp
+
+    iframe_dir = Path(_IFRAME_DIR)
+    if not iframe_dir.exists() or not (iframe_dir / "package.json").exists():
+        iframe_dir.mkdir(parents=True, exist_ok=True)
+        _sp.run(
+            [
+                "pnpm",
+                "create",
+                "next-app",
+                ".",
+                "--typescript",
+                "--tailwind",
+                "--app",
+                "--src-dir",
+                "--import-alias",
+                "@/*",
+                "--use-pnpm",
+                "--yes",
+            ],
+            cwd=iframe_dir,
+            check=True,
+        )
+
+    pid_file = iframe_dir / ".dev-server.pid"
+    if pid_file.exists():
+        try:
+            pid = int(pid_file.read_text().strip())
+            os.kill(pid, 0)
+            return
+        except Exception:
+            pid_file.unlink()
+
+    proc = _sp.Popen(
+        ["pnpm", "run", "dev", "--port", "3040"],
+        cwd=iframe_dir,
+        stdout=_sp.DEVNULL,
+        stderr=_sp.DEVNULL,
+    )
+    if proc.pid:
+        pid_file.write_text(str(proc.pid))
+
+
 @app.post("/upload-stream")
 async def upload_stream(
     file: UploadFile = File(...),
@@ -452,54 +497,6 @@ async def upload_stream(
     logging.basicConfig(level=logging.INFO)
     logger = logging.getLogger(__name__)
     logger.info("=== upload-stream endpoint called ===")
-
-    def ensure_iframe_dev_server():
-        """Ensure /tmp/site has a Next.js project and dev server running."""
-        import subprocess
-
-        iframe_dir = Path(_IFRAME_DIR)
-        if not iframe_dir.exists() or not (iframe_dir / "package.json").exists():
-            iframe_dir.mkdir(parents=True, exist_ok=True)
-            subprocess.run(
-                [
-                    "pnpm",
-                    "create",
-                    "next-app",
-                    ".",
-                    "--typescript",
-                    "--tailwind",
-                    "--app",
-                    "--src-dir",
-                    "--import-alias",
-                    "@/*",
-                    "--use-pnpm",
-                    "--yes",
-                ],
-                cwd=iframe_dir,
-                check=True,
-            )
-
-        pid_file = iframe_dir / ".dev-server.pid"
-        if pid_file.exists():
-            try:
-                pid = int(pid_file.read_text().strip())
-                import os
-
-                os.kill(pid, 0)
-                return
-            except:
-                pid_file.unlink()
-
-        import subprocess
-
-        proc = subprocess.Popen(
-            ["pnpm", "run", "dev", "--port", "3040"],
-            cwd=iframe_dir,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
-        if proc.pid:
-            pid_file.write_text(str(proc.pid))
 
     async def generate():
         tmp_dir = None
@@ -634,7 +631,7 @@ async def upload_stream(
             import threading
 
             logger.info("Step 6: Starting iframe dev server in background...")
-            threading.Thread(target=ensure_iframe_dev_server, daemon=True).start()
+            threading.Thread(target=_ensure_iframe_dev_server, daemon=True).start()
 
             # Complete
             logger.info("Upload-stream complete! Sending to frontend")
