@@ -1,0 +1,13 @@
+{
+  "name": "nebius",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently --kill-others=false \"pnpm api\" \"pnpm web\"",
+    "api": "cd api && uv run uvicorn src.frame_extractor.main:app --reload --port 8000",
+    "web": "pnpm --dir web dev"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  },
+  "packageManager": "pnpm@9.15.0"
+}

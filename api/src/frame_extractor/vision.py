@@ -12,7 +12,7 @@ _NEBIUS_BASE_URL = "https://api.studio.nebius.com/v1/"
 _MODEL = "Qwen/Qwen2.5-VL-72B-Instruct"
 
 
-def _frame_to_base64(frame: np.ndarray, max_dim: int = 1024) -> str:
+def _frame_to_base64(frame: np.ndarray, max_dim: int = 768) -> str:
     """Downscale frame and encode as base64 JPEG for API."""
     img = Image.fromarray(frame)
     scale = max_dim / max(img.size)
@@ -22,7 +22,7 @@ def _frame_to_base64(frame: np.ndarray, max_dim: int = 1024) -> str:
             Image.Resampling.BILINEAR,
         )
     buf = io.BytesIO()
-    img.save(buf, "JPEG", quality=80)
+    img.save(buf, "JPEG", quality=70)
     return base64.b64encode(buf.getvalue()).decode()
 
 
@@ -38,7 +38,7 @@ def detect_content_bbox(
     h, w = frame.shape[:2]
 
     # Downscale for API, remember scale factor
-    max_dim = 1024
+    max_dim = 768
     scale = max_dim / max(w, h)
     if scale >= 1.0:
         scale = 1.0

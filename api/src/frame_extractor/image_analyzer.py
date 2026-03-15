@@ -13,13 +13,13 @@ from .providers import get_provider
 from .prompts import IMAGE_ANALYSIS_PROMPT
 
 
-def encode_image_to_base64(image_path: str, max_dim: int = 1024) -> str:
+def encode_image_to_base64(image_path: str, max_dim: int = 768) -> str:
     """
     Encode image to base64 for API calls.
 
     Args:
         image_path: Path to the image file
-        max_dim: Maximum dimension for resizing
+        max_dim: Maximum width in pixels (height capped at 3x width for tall stitched pages)
 
     Returns:
         Base64-encoded image string
@@ -32,15 +32,19 @@ def encode_image_to_base64(image_path: str, max_dim: int = 1024) -> str:
         background.paste(img, mask=img.split()[3])
         img = background
 
-    scale = max_dim / max(img.size)
-    if scale < 1.0:
+    # Scale by width, then cap height for very tall stitched pages
+    if img.width > max_dim:
+        scale = max_dim / img.width
         img = img.resize(
-            (int(img.width * scale), int(img.height * scale)),
+            (max_dim, int(img.height * scale)),
             Image.Resampling.BILINEAR,
         )
+    max_height = max_dim * 3
+    if img.height > max_height:
+        img = img.crop((0, 0, img.width, max_height))
 
     buf = io.BytesIO()
-    img.save(buf, "JPEG", quality=85)
+    img.save(buf, "JPEG", quality=70)
     return base64.b64encode(buf.getvalue()).decode()
 
 

@@ -13,23 +13,30 @@ export default function UploadPage() {
     setFile(fileToUpload);
     setUploading(true);
     setError(null);
+
     const formData = new FormData();
     formData.append("file", fileToUpload);
 
     try {
-      const res = await fetch("/api/upload", {
+      const res = await fetch("/api/upload-start", {
         method: "POST",
         body: formData,
       });
-      const data = await res.json().catch(() => ({}));
+
       if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
         setError((data.error as string) || "Upload failed");
         setUploading(false);
         return;
       }
-      router.push("/status");
+
+      const data = await res.json();
+      const uploadId = data.uploadId;
+
+      router.push(`/chat?uploadId=${uploadId}`);
     } catch {
       setError("Network error. Please try again.");
+    } finally {
       setUploading(false);
     }
   };
@@ -47,11 +54,11 @@ export default function UploadPage() {
   const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     const item = e.dataTransfer.files?.[0];
-    if (item?.type === "video/mp4") {
+    if (item && (item.type.startsWith("video/") || item.type.startsWith("image/"))) {
       setError(null);
       uploadFile(item);
     } else if (item) {
-      setError("Please select an MP4 video file.");
+      setError("Please select a video or image file.");
       setFile(null);
     }
   };
@@ -86,21 +93,27 @@ export default function UploadPage() {
         }}
       >
         <h1 style={{ marginBottom: "1rem", fontSize: "1.5rem" }}>
-          Upload screencast video
+          Upload video or image
         </h1>
         <p style={{ marginBottom: "1.5rem", color: "#666" }}>
-          Drop an MP4 file here or click to choose
+          Drop a video or image here or click to choose
         </p>
         <input
           type="file"
-          accept="video/mp4"
+          accept="video/*,image/*"
           onChange={handleFileChange}
           disabled={uploading}
           style={{ display: "block", margin: "0 auto 1rem" }}
         />
         {file && (
           <p style={{ marginBottom: 0, fontSize: "0.9rem" }}>
-            {uploading ? `Uploading ${file.name}…` : `Selected: ${file.name}`}
+            {uploading ? `Processing ${file.name}…` : `Selected: ${file.name}`}
+          </p>
+        )}
+
+        {uploading && (
+          <p style={{ marginTop: "1rem", fontSize: "0.9rem", color: "#666" }}>
+            Uploading…
           </p>
         )}
       </div>
