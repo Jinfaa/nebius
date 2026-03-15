@@ -3,10 +3,10 @@
 import { useCallback, useEffect, useRef, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import md5 from "md5";
+import { IFRAME_URL } from "@/helpers/constants";
 
 type Message = { role: "user" | "assistant"; content: string };
 
-const IFRAME_SRC = process.env.IFRAME_URL!;
 const CHAT_STORAGE_PREFIX = "nebius-chat-messages";
 
 /** Build a canonical query string (sorted keys) so same params => same hash. */
@@ -61,7 +61,7 @@ function ChatContent() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
-  const [iframeUrl, setIframeUrl] = useState(IFRAME_SRC);
+  const [iframeUrl, setIframeUrl] = useState(IFRAME_URL);
   const historyRef = useRef<HTMLDivElement>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const hasHydrated = useRef(false);
@@ -260,7 +260,7 @@ function ChatContent() {
         />
         <iframe
           ref={iframeRef}
-          src={IFRAME_SRC}
+          src={IFRAME_URL}
           title="Preview"
           style={{
             flex: 1,

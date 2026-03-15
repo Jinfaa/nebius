@@ -1,11 +1,12 @@
+import { IFRAME_DIR, IFRAME_URL } from "@/helpers/constants";
 import { startIframeDevServer, waitForPortReady } from "@/helpers/iframe-dev";
 import { execSync } from "child_process";
 import { existsSync, mkdirSync } from "fs";
 import { NextRequest, NextResponse } from "next/server";
 
 export async function POST(request: NextRequest) {
-  const iframeDir = process.env.IFRAME_DIR!;
-  const iframePort = process.env.IFRAME_URL!.match(/:(\d+)/)?.[1];
+  const iframeDir = IFRAME_DIR;
+  const iframePort = IFRAME_URL.match(/:(\d+)/)?.[1];
 
   const formData = await request.formData();
   const file = formData.get("file") ?? formData.get("input");

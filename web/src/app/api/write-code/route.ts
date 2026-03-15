@@ -1,9 +1,10 @@
+import { IFRAME_DIR } from "@/helpers/constants";
 import { NextRequest, NextResponse } from "next/server";
 
 export type ChatMessage = { role: "user" | "assistant"; content: string };
 
 export async function POST(request: NextRequest) {
-  const iframeDir = process.env.IFRAME_DIR!;
+  const iframeDir = IFRAME_DIR;
 
   let body: unknown;
   try {
