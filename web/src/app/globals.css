@@ -1,5 +1,9 @@
 @import "tailwindcss";
 
+main > aside:nth-child(2) {
+  display: none !important;
+}
+
 @theme {
   --color-surface: #0f172a;
   --color-surface-raised: #1e293b;
@@ -52,4 +56,5 @@
   ::-webkit-scrollbar-thumb:hover {
     background: var(--color-text-dim);
   }
+
 }
