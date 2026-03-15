@@ -4,7 +4,8 @@
   "scripts": {
     "dev": "concurrently --kill-others=false \"pnpm api\" \"pnpm web\"",
     "api": "cd api && uv run uvicorn src.frame_extractor.main:app --reload --port 8000",
-    "web": "pnpm --dir web dev"
+    "web": "pnpm --dir web dev",
+    "kill": "lsof -ti:8000 -ti:3000 -ti:3040 | xargs kill -9 2>/dev/null || true"
   },
   "devDependencies": {
     "concurrently": "^9.1.2"
