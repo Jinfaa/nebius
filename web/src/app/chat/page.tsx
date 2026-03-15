@@ -9,9 +9,8 @@ type Message = { role: "user" | "assistant"; content: string };
 
 const CHAT_STORAGE_PREFIX = "nebius-chat-messages";
 
-/** Build a canonical query string (sorted keys) so same params => same hash. */
 function getCanonicalQueryString(searchParams: URLSearchParams): string {
-  return [...searchParams.entries()]
+  return Array.from(searchParams.entries())
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([k, v]) => `${k}=${v}`)
     .join("&");
@@ -61,7 +60,7 @@ function ChatContent() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
-  const [iframeUrl, setIframeUrl] = useState(IFRAME_URL);
+  const [iframeUrl] = useState(IFRAME_URL);
   const historyRef = useRef<HTMLDivElement>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const hasHydrated = useRef(false);
@@ -70,7 +69,6 @@ function ChatContent() {
   const { plan, imageUrls } = parseChatParams(searchParams);
   const querySignature = getCanonicalQueryString(searchParams);
 
-  // Load from localStorage after mount (avoids hydration error). Re-load when query params change.
   useEffect(() => {
     if (!hasHydrated.current) hasHydrated.current = true;
     const stored = loadMessagesFromStorage(searchParams);
@@ -118,156 +116,190 @@ function ChatContent() {
   }, [input, messages, sending]);
 
   return (
-    <main
-      style={{
-        display: "flex",
-        width: "100vw",
-        height: "100vh",
-        overflow: "hidden",
-      }}
-    >
-      {/* Left sidebar 1: chat */}
-      <aside
-        style={{
-          width: "25%",
-          minWidth: 0,
-          display: "flex",
-          flexDirection: "column",
-          borderRight: "1px solid #ddd",
-        }}
-      >
+    <main className="flex h-dvh w-screen overflow-hidden bg-surface">
+      {/* Chat sidebar */}
+      <aside className="flex w-1/4 min-w-0 flex-col border-r border-border">
+        <div className="flex items-center gap-2 border-b border-border px-4 py-3">
+          <svg
+            className="h-4 w-4 text-primary"
+            fill="none"
+            viewBox="0 0 24 24"
+            strokeWidth={2}
+            stroke="currentColor"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d="M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.129.166 2.27.293 3.423.379.35.026.67.21.865.501L12 21l2.755-4.133a1.14 1.14 0 0 1 .865-.501 48.172 48.172 0 0 0 3.423-.379c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0 0 12 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018Z"
+            />
+          </svg>
+          <span className="text-sm font-semibold text-text">Chat</span>
+        </div>
+
         <div
           ref={historyRef}
-          style={{
-            flex: "0 0 75%",
-            overflowY: "auto",
-            padding: "0.75rem",
-          }}
+          className="flex-1 space-y-3 overflow-y-auto p-3"
         >
           {messages.map((m, i) => (
             <div
               key={i}
-              style={{
-                marginBottom: "0.75rem",
-                padding: "0.5rem",
-                borderRadius: "6px",
-                backgroundColor: m.role === "user" ? "#e3f2fd" : "transparent",
-                whiteSpace: "pre-wrap",
-                wordBreak: "break-word",
-              }}
+              className={`rounded-xl px-3.5 py-2.5 text-sm leading-relaxed whitespace-pre-wrap break-words ${
+                m.role === "user"
+                  ? "ml-4 bg-user-bubble text-text"
+                  : "mr-4 bg-surface-raised text-text"
+              }`}
             >
-              <strong>{m.role === "user" ? "You" : "Plan"}: </strong>
+              <span
+                className={`mb-1 block text-xs font-semibold ${
+                  m.role === "user" ? "text-primary" : "text-accent"
+                }`}
+              >
+                {m.role === "user" ? "You" : "Plan"}
+              </span>
               {m.content}
             </div>
           ))}
+          {sending && (
+            <div className="mr-4 flex items-center gap-2 rounded-xl bg-surface-raised px-3.5 py-2.5 text-sm text-text-muted">
+              <div className="flex gap-1">
+                <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-text-dim" style={{ animationDelay: "0ms" }} />
+                <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-text-dim" style={{ animationDelay: "150ms" }} />
+                <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-text-dim" style={{ animationDelay: "300ms" }} />
+              </div>
+              Thinking…
+            </div>
+          )}
         </div>
-        <div
-          style={{
-            flex: "0 0 25%",
-            display: "flex",
-            flexDirection: "column",
-            padding: "0.5rem",
-            borderTop: "1px solid #ddd",
-          }}
-        >
-          <textarea
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                sendMessage();
-              }
-            }}
-            placeholder="Type a message…"
-            rows={3}
-            style={{
-              width: "100%",
-              resize: "none",
-              marginBottom: "0.5rem",
-              padding: "0.5rem",
-            }}
-          />
-          <button
-            type="button"
-            onClick={sendMessage}
-            disabled={sending || !input.trim()}
-            style={{
-              padding: "0.5rem 1rem",
-              cursor: sending || !input.trim() ? "not-allowed" : "pointer",
-              opacity: sending || !input.trim() ? 0.6 : 1,
-            }}
-          >
-            Send
-          </button>
-        </div>
-      </aside>
 
-      {/* Left sidebar 2: screenshots */}
-      <aside
-        style={{
-          width: "25%",
-          minWidth: 0,
-          overflowY: "auto",
-          borderRight: "1px solid #ddd",
-          padding: "0.5rem",
-        }}
-      >
-        {imageUrls.map((url, i) => (
-          <div key={i} style={{ marginBottom: "0.5rem" }}>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={url}
-              alt={`Screenshot ${i + 1}`}
-              style={{
-                width: "100%",
-                height: "auto",
-                display: "block",
-                borderRadius: "4px",
+        <div className="border-t border-border p-3">
+          <div className="flex flex-col gap-2">
+            <textarea
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  sendMessage();
+                }
               }}
+              placeholder="Type a message…"
+              rows={3}
+              className="w-full resize-none rounded-xl border border-border bg-surface-raised px-3.5 py-2.5 text-sm text-text placeholder-text-dim outline-none transition-colors duration-150 focus:border-primary focus:ring-1 focus:ring-primary/50"
             />
+            <button
+              type="button"
+              onClick={sendMessage}
+              disabled={sending || !input.trim()}
+              className="flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white transition-all duration-150 hover:bg-primary-hover active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40 cursor-pointer"
+            >
+              <svg
+                className="h-4 w-4"
+                fill="none"
+                viewBox="0 0 24 24"
+                strokeWidth={2}
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M6 12 3.269 3.125A59.769 59.769 0 0 1 21.485 12 59.768 59.768 0 0 1 3.27 20.875L5.999 12Zm0 0h7.5"
+                />
+              </svg>
+              Send
+            </button>
           </div>
-        ))}
+        </div>
       </aside>
 
-      {/* Main: iframe */}
-      <section
-        style={{
-          width: "50%",
-          minWidth: 0,
-          height: "100%",
-          display: "flex",
-          flexDirection: "column",
-        }}
-      >
-        <input
-          type="text"
-          readOnly
-          value={iframeUrl}
-          aria-label="Current iframe URL"
-          style={{
-            width: "100%",
-            boxSizing: "border-box",
-            padding: "0.5rem 0.75rem",
-            margin: 0,
-            border: "1px solid #ddd",
-            borderLeft: "none",
-            borderRadius: 0,
-            background: "#f5f5f5",
-            fontFamily: "monospace",
-            fontSize: "0.875rem",
-          }}
-        />
+      {/* Screenshots sidebar */}
+      <aside className="flex w-1/4 min-w-0 flex-col border-r border-border">
+        <div className="flex items-center gap-2 border-b border-border px-4 py-3">
+          <svg
+            className="h-4 w-4 text-primary"
+            fill="none"
+            viewBox="0 0 24 24"
+            strokeWidth={2}
+            stroke="currentColor"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d="m2.25 15.75 5.159-5.159a2.25 2.25 0 0 1 3.182 0l5.159 5.159m-1.5-1.5 1.409-1.409a2.25 2.25 0 0 1 3.182 0l2.909 2.909M3.75 21h16.5A2.25 2.25 0 0 0 22.5 18.75V5.25a2.25 2.25 0 0 0-2.25-2.25H3.75A2.25 2.25 0 0 0 1.5 5.25v13.5A2.25 2.25 0 0 0 3.75 21Z"
+            />
+          </svg>
+          <span className="text-sm font-semibold text-text">Screenshots</span>
+          {imageUrls.length > 0 && (
+            <span className="rounded-full bg-surface-overlay px-2 py-0.5 text-xs text-text-muted">
+              {imageUrls.length}
+            </span>
+          )}
+        </div>
+
+        <div className="flex-1 space-y-2 overflow-y-auto p-3">
+          {imageUrls.length === 0 ? (
+            <div className="flex flex-col items-center justify-center gap-2 py-12 text-text-dim">
+              <svg
+                className="h-8 w-8"
+                fill="none"
+                viewBox="0 0 24 24"
+                strokeWidth={1}
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="m2.25 15.75 5.159-5.159a2.25 2.25 0 0 1 3.182 0l5.159 5.159m-1.5-1.5 1.409-1.409a2.25 2.25 0 0 1 3.182 0l2.909 2.909M3.75 21h16.5A2.25 2.25 0 0 0 22.5 18.75V5.25a2.25 2.25 0 0 0-2.25-2.25H3.75A2.25 2.25 0 0 0 1.5 5.25v13.5A2.25 2.25 0 0 0 3.75 21Z"
+                />
+              </svg>
+              <span className="text-xs">No screenshots yet</span>
+            </div>
+          ) : (
+            imageUrls.map((url, i) => (
+              <div
+                key={i}
+                className="overflow-hidden rounded-lg border border-border transition-all duration-150 hover:border-primary/50"
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={url}
+                  alt={`Screenshot ${i + 1}`}
+                  className="block w-full"
+                />
+              </div>
+            ))
+          )}
+        </div>
+      </aside>
+
+      {/* Preview iframe */}
+      <section className="flex min-w-0 flex-1 flex-col">
+        <div className="flex items-center gap-2 border-b border-border px-4 py-3">
+          <svg
+            className="h-4 w-4 text-primary"
+            fill="none"
+            viewBox="0 0 24 24"
+            strokeWidth={2}
+            stroke="currentColor"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d="M12 21a9.004 9.004 0 0 0 8.716-6.747M12 21a9.004 9.004 0 0 1-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3m0 0a8.997 8.997 0 0 1 7.843 4.582M12 3a8.997 8.997 0 0 0-7.843 4.582m15.686 0A11.953 11.953 0 0 1 12 10.5c-2.998 0-5.74-1.1-7.843-2.918m15.686 0A8.959 8.959 0 0 1 21 12c0 .778-.099 1.533-.284 2.253m0 0A17.919 17.919 0 0 1 12 16.5a17.92 17.92 0 0 1-8.716-2.247m0 0A9.015 9.015 0 0 1 3 12c0-1.605.42-3.113 1.157-4.418"
+            />
+          </svg>
+          <span className="text-sm font-semibold text-text">Preview</span>
+          <div className="ml-auto flex items-center gap-1.5 rounded-lg bg-surface-raised px-3 py-1.5">
+            <div className="h-2 w-2 rounded-full bg-success" />
+            <span className="font-mono text-xs text-text-muted">
+              {iframeUrl}
+            </span>
+          </div>
+        </div>
         <iframe
           ref={iframeRef}
           src={IFRAME_URL}
           title="Preview"
-          style={{
-            flex: 1,
-            minHeight: 0,
-            width: "100%",
-            border: "none",
-          }}
+          className="min-h-0 flex-1 border-none bg-white"
         />
       </section>
     </main>
@@ -276,7 +308,16 @@ function ChatContent() {
 
 export default function ChatPage() {
   return (
-    <Suspense fallback={<div style={{ padding: "2rem" }}>Loading…</div>}>
+    <Suspense
+      fallback={
+        <div className="flex h-dvh items-center justify-center bg-surface">
+          <div className="flex flex-col items-center gap-4">
+            <div className="h-8 w-8 animate-spin rounded-full border-2 border-transparent border-t-primary" />
+            <p className="text-text-muted">Loading…</p>
+          </div>
+        </div>
+      }
+    >
       <ChatContent />
     </Suspense>
   );

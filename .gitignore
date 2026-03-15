@@ -1,3 +1,5 @@
 dummy
 .DS_Store
 tmp
+*.py[cod]
+.pnpm-store

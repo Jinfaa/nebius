@@ -6,7 +6,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 export async function POST(request: NextRequest) {
   const iframeDir = IFRAME_DIR;
-  const iframePort = IFRAME_URL.match(/:(\d+)/)?.[1];
+  const iframePort = IFRAME_URL.match(/:(\d+)/)?.[1]!;
 
   const formData = await request.formData();
   const file = formData.get("file") ?? formData.get("input");
@@ -25,10 +25,9 @@ export async function POST(request: NextRequest) {
         `cd "${iframeDir}" && ` +
         `pnpm create next-app . --typescript --tailwind --app --src-dir --import-alias "@/*" --use-pnpm --yes`,
     );
-    const port = iframePort ?? "3001";
-    startIframeDevServer(iframeDir, port);
+    startIframeDevServer(iframeDir, iframePort);
     try {
-      await waitForPortReady(port);
+      await waitForPortReady(iframePort);
     } catch (err) {
       const message =
         err instanceof Error
