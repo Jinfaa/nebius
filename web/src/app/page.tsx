@@ -93,10 +93,9 @@ export default function UploadPage() {
         className={`
           group relative w-full max-w-lg cursor-pointer rounded-2xl border-2 border-dashed
           p-12 text-center transition-all duration-200
-          ${
-            dragOver
-              ? "border-primary bg-primary/10 shadow-[0_0_30px_rgba(37,99,235,0.15)]"
-              : "border-border hover:border-primary/50 hover:bg-surface-raised/50"
+          ${dragOver
+            ? "border-primary bg-primary/10 shadow-[0_0_30px_rgba(37,99,235,0.15)]"
+            : "border-border hover:border-primary/50 hover:bg-surface-raised/50"
           }
         `}
       >
@@ -125,10 +124,9 @@ export default function UploadPage() {
           className={`
             inline-flex cursor-pointer items-center gap-2 rounded-lg px-6 py-2.5
             text-sm font-medium text-white transition-all duration-200
-            ${
-              uploading
-                ? "bg-text-dim cursor-not-allowed"
-                : "bg-primary hover:bg-primary-hover active:scale-[0.98] shadow-[0_0_20px_rgba(37,99,235,0.2)]"
+            ${uploading
+              ? "bg-text-dim cursor-not-allowed"
+              : "bg-primary hover:bg-primary-hover active:scale-[0.98] shadow-[0_0_20px_rgba(37,99,235,0.2)]"
             }
           `}
         >
@@ -160,7 +158,6 @@ export default function UploadPage() {
           )}
           <input
             type="file"
-            accept="video/mp4"
             onChange={handleFileChange}
             disabled={uploading}
             className="sr-only"
