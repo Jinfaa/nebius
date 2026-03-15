@@ -12,6 +12,7 @@ from PIL import Image
 from .extractor import iter_frames
 from .similarity import is_similar_cached
 from .archive import build_zip
+from .stitcher import group_and_stitch
 
 app = FastAPI(
     title="Video Frame Extractor",
@@ -118,6 +119,80 @@ def _save_frame(frame_dir: Path, index: int, rgb_array, quality: int) -> None:
 def _cleanup(tmp_dir: Path) -> None:
     """Clean up temporary directory."""
     shutil.rmtree(tmp_dir)
+
+
+@app.post("/stitch-frames", response_class=FileResponse)
+async def stitch_endpoint(
+    file: UploadFile = File(...),
+    threshold: float = Query(0.95, ge=0.0, le=1.0),
+    quality: int = Query(85, ge=1, le=100),
+    nebius_api_key: str | None = Query(None, description="Nebius AI Studio API key for smart content detection"),
+):
+    """
+    Extract all frames from a screencast/scroll video, group by scene
+    (same page = high SSIM), and stitch each scene into a single long screenshot.
+
+    Returns a ZIP with page_001.png, page_002.png, etc.
+    """
+    tmp_dir = None
+    try:
+        tmp_dir = Path(tempfile.mkdtemp(prefix="stitch_"))
+
+        video_path = tmp_dir / "input.mp4"
+        contents = await file.read()
+        if not contents:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Uploaded file is empty",
+            )
+        video_path.write_bytes(contents)
+
+        all_frames: list = []
+        try:
+            for _, rgb_array in iter_frames(video_path):
+                all_frames.append(rgb_array)
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Failed to decode video: {str(e)}",
+            )
+
+        if not all_frames:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="No frames extracted from video",
+            )
+
+        pages = group_and_stitch(all_frames, scene_threshold=threshold, api_key=nebius_api_key)
+
+        output_dir = tmp_dir / "pages"
+        output_dir.mkdir()
+        for i, page in enumerate(pages, 1):
+            Image.fromarray(page).save(
+                output_dir / f"page_{i:03d}.png", "PNG"
+            )
+
+        zip_path = tmp_dir / "pages.zip"
+        build_zip(output_dir, zip_path)
+
+        return FileResponse(
+            path=zip_path,
+            filename="pages.zip",
+            media_type="application/zip",
+            background=BackgroundTask(_cleanup, tmp_dir),
+        )
+
+    except HTTPException:
+        if tmp_dir:
+            shutil.rmtree(tmp_dir)
+        raise
+    except Exception as e:
+        if tmp_dir:
+            shutil.rmtree(tmp_dir)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e),
+        )
 
 
 @app.get("/health")
