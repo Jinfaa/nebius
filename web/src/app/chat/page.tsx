@@ -2,10 +2,47 @@
 
 import { useCallback, useEffect, useRef, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
+import md5 from "md5";
 
 type Message = { role: "user" | "assistant"; content: string };
 
-const IFRAME_SRC = "http://localhost:4000";
+const IFRAME_SRC = process.env.IFRAME_URL!;
+const CHAT_STORAGE_PREFIX = "nebius-chat-messages";
+
+/** Build a canonical query string (sorted keys) so same params => same hash. */
+function getCanonicalQueryString(searchParams: URLSearchParams): string {
+  return [...searchParams.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([k, v]) => `${k}=${v}`)
+    .join("&");
+}
+
+function getStorageKey(searchParams: URLSearchParams): string {
+  const qs = getCanonicalQueryString(searchParams);
+  return qs ? `${CHAT_STORAGE_PREFIX}-${md5(qs)}` : CHAT_STORAGE_PREFIX;
+}
+
+function loadMessagesFromStorage(searchParams: URLSearchParams): Message[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = localStorage.getItem(getStorageKey(searchParams));
+    if (raw) return JSON.parse(raw) as Message[];
+  } catch {
+    // ignore
+  }
+  return [];
+}
+
+function saveMessagesToStorage(
+  searchParams: URLSearchParams,
+  messages: Message[],
+) {
+  try {
+    localStorage.setItem(getStorageKey(searchParams), JSON.stringify(messages));
+  } catch {
+    // ignore
+  }
+}
 
 function parseChatParams(searchParams: ReturnType<typeof useSearchParams>) {
   const plan = searchParams.get("plan") ?? "";
@@ -24,18 +61,35 @@ function ChatContent() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
+  const [iframeUrl, setIframeUrl] = useState(IFRAME_SRC);
   const historyRef = useRef<HTMLDivElement>(null);
-  const initialized = useRef(false);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const hasHydrated = useRef(false);
+  const skipNextSave = useRef(true);
 
   const { plan, imageUrls } = parseChatParams(searchParams);
+  const querySignature = getCanonicalQueryString(searchParams);
+
+  // Load from localStorage after mount (avoids hydration error). Re-load when query params change.
+  useEffect(() => {
+    if (!hasHydrated.current) hasHydrated.current = true;
+    const stored = loadMessagesFromStorage(searchParams);
+    if (stored.length > 0) {
+      setMessages(stored);
+    } else if (plan) {
+      setMessages([{ role: "assistant", content: plan }]);
+    } else {
+      setMessages([]);
+    }
+  }, [querySignature, plan, searchParams]);
 
   useEffect(() => {
-    if (initialized.current) return;
-    initialized.current = true;
-    if (plan) {
-      setMessages([{ role: "assistant", content: plan }]);
+    if (skipNextSave.current) {
+      skipNextSave.current = false;
+      return;
     }
-  }, [plan]);
+    saveMessagesToStorage(searchParams, messages);
+  }, [querySignature, messages, searchParams]);
 
   useEffect(() => {
     if (!historyRef.current) return;
@@ -97,8 +151,7 @@ function ChatContent() {
                 marginBottom: "0.75rem",
                 padding: "0.5rem",
                 borderRadius: "6px",
-                backgroundColor:
-                  m.role === "user" ? "#e3f2fd" : "transparent",
+                backgroundColor: m.role === "user" ? "#e3f2fd" : "transparent",
                 whiteSpace: "pre-wrap",
                 wordBreak: "break-word",
               }}
@@ -183,14 +236,36 @@ function ChatContent() {
           width: "50%",
           minWidth: 0,
           height: "100%",
+          display: "flex",
+          flexDirection: "column",
         }}
       >
+        <input
+          type="text"
+          readOnly
+          value={iframeUrl}
+          aria-label="Current iframe URL"
+          style={{
+            width: "100%",
+            boxSizing: "border-box",
+            padding: "0.5rem 0.75rem",
+            margin: 0,
+            border: "1px solid #ddd",
+            borderLeft: "none",
+            borderRadius: 0,
+            background: "#f5f5f5",
+            fontFamily: "monospace",
+            fontSize: "0.875rem",
+          }}
+        />
         <iframe
+          ref={iframeRef}
           src={IFRAME_SRC}
           title="Preview"
           style={{
+            flex: 1,
+            minHeight: 0,
             width: "100%",
-            height: "100%",
             border: "none",
           }}
         />

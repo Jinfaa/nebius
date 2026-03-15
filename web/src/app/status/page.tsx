@@ -19,15 +19,13 @@ function isFinished(r: Result): r is FinishedResult {
 function StatusContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const jobId = searchParams.get("jobId");
   const [message, setMessage] = useState<string>("Loading…");
   const [error, setError] = useState<string | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const openedAt = useRef(new Date());
 
   const fetchResult = useCallback(async () => {
-    const url = jobId
-      ? `/api/result?jobId=${encodeURIComponent(jobId)}`
-      : "/api/result";
+    const url = `/api/result?openedAt=${openedAt.current.getTime()}`;
     const res = await fetch(url);
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
@@ -35,7 +33,7 @@ function StatusContent() {
       return null;
     }
     return data as Result;
-  }, [jobId]);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -52,7 +50,7 @@ function StatusContent() {
         const params = new URLSearchParams();
         params.set("plan", result.plan);
         params.set("imageUrls", JSON.stringify(result.imageUrls));
-        router.push(`/chat?${params.toString()}`);
+        router.replace(`/chat?${params.toString()}`);
         return;
       }
       setMessage(result.message);
@@ -94,7 +92,20 @@ function StatusContent() {
 
 export default function StatusPage() {
   return (
-    <Suspense fallback={<main style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}><p>Loading…</p></main>}>
+    <Suspense
+      fallback={
+        <main
+          style={{
+            minHeight: "100vh",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <p>Loading…</p>
+        </main>
+      }
+    >
       <StatusContent />
     </Suspense>
   );

@@ -1,44 +1,51 @@
+import { startIframeDevServer, waitForPortReady } from "@/helpers/iframe-dev";
+import { execSync } from "child_process";
+import { existsSync, mkdirSync } from "fs";
 import { NextRequest, NextResponse } from "next/server";
 
-const DEFAULT_OUTPUT = "./plan";
-
 export async function POST(request: NextRequest) {
-  const baseUrl = process.env.VIDEO2SITE_API_URL;
-  if (!baseUrl) {
-    return NextResponse.json(
-      { error: "VIDEO2SITE_API_URL is not configured" },
-      { status: 500 }
-    );
-  }
+  const iframeDir = process.env.IFRAME_DIR!;
+  const iframePort = process.env.IFRAME_URL!.match(/:(\d+)/)?.[1];
 
-  let formData: FormData;
-  try {
-    formData = await request.formData();
-  } catch {
-    return NextResponse.json(
-      { error: "Invalid form data" },
-      { status: 400 }
-    );
-  }
-
+  const formData = await request.formData();
   const file = formData.get("file") ?? formData.get("input");
-  const output = (formData.get("output") as string | null) ?? DEFAULT_OUTPUT;
 
   if (!file || !(file instanceof File)) {
     return NextResponse.json(
       { error: "Missing video file (use field 'file' or 'input')" },
-      { status: 400 }
+      { status: 400 },
     );
+  }
+
+  if (!existsSync(iframeDir)) {
+    mkdirSync(iframeDir, { recursive: true });
+    execSync(
+      `mkdir -p "${iframeDir}" && ` +
+        `cd "${iframeDir}" && ` +
+        `pnpm create next-app . --typescript --tailwind --app --src-dir --import-alias "@/*" --use-pnpm --yes`,
+    );
+    const port = iframePort ?? "3001";
+    startIframeDevServer(iframeDir, port);
+    try {
+      await waitForPortReady(port);
+    } catch (err) {
+      const message =
+        err instanceof Error
+          ? err.message
+          : "Iframe dev server failed to start";
+      return NextResponse.json({ error: message }, { status: 502 });
+    }
   }
 
   const externalFormData = new FormData();
   externalFormData.append("input", file);
-  externalFormData.append("output", output);
+  externalFormData.append("dir", iframeDir);
 
   try {
     return NextResponse.json({ success: true });
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Upload request failed";
+    const message =
+      err instanceof Error ? err.message : "Upload request failed";
     return NextResponse.json({ error: message }, { status: 502 });
   }
 }

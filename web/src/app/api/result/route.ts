@@ -1,34 +1,24 @@
 import { NextRequest, NextResponse } from "next/server";
 
 export async function GET(request: NextRequest) {
-  const baseUrl = process.env.VIDEO2SITE_API_URL;
-  if (!baseUrl) {
-    return NextResponse.json(
-      { error: "VIDEO2SITE_API_URL is not configured" },
-      { status: 500 }
-    );
-  }
-
+  const baseUrl = process.env.API_URL!;
   const { searchParams } = new URL(request.url);
-  const jobId = searchParams.get("jobId");
-
+  const openedAt = Number(searchParams.get("openedAt"));
   const url = new URL("/result", baseUrl.replace(/\/$/, ""));
-  if (jobId) url.searchParams.set("jobId", jobId);
 
   try {
-    const res = await fetch(url.toString(), { method: "GET" });
-    const data = await res.json().catch(() => ({}));
-
-    if (!res.ok) {
-      return NextResponse.json(
-        typeof data === "object" && data !== null && "error" in data
-          ? data
-          : { error: "Result request failed", details: data },
-        { status: res.status }
-      );
-    }
-
-    return NextResponse.json(data);
+    return NextResponse.json(
+      Date.now() - openedAt < 2000
+        ? {
+            status: "pending",
+            message: "Extracting frames... " + new Date(),
+          }
+        : {
+            status: "finished",
+            plan: "test " + Date.now(),
+            imageUrls: ["/cat.jpg"],
+          },
+    );
   } catch (err) {
     const message =
       err instanceof Error ? err.message : "Result request failed";
