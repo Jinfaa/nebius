@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
+import Link from "next/link";
 import md5 from "md5";
 import { IFRAME_URL } from "@/helpers/constants";
 
@@ -119,7 +120,14 @@ function ChatContent() {
     <main className="flex h-dvh w-screen overflow-hidden bg-surface">
       {/* Chat sidebar */}
       <aside className="flex w-1/4 min-w-0 flex-col border-r border-border">
-        <div className="flex items-center gap-2 border-b border-border px-4 py-3">
+        <div className="flex h-12 items-center gap-2 border-b border-border px-4">
+          <Link
+            href="/"
+            className="text-sm font-bold tracking-tight text-text transition-colors hover:text-primary"
+          >
+            Video<span className="text-primary">2</span>Site
+          </Link>
+          <span className="text-text-dim">/</span>
           <svg
             className="h-4 w-4 text-primary"
             fill="none"
@@ -213,7 +221,7 @@ function ChatContent() {
 
       {/* Screenshots sidebar */}
       <aside className="flex w-1/4 min-w-0 flex-col border-r border-border">
-        <div className="flex items-center gap-2 border-b border-border px-4 py-3">
+        <div className="flex h-12 items-center gap-2 border-b border-border px-4">
           <svg
             className="h-4 w-4 text-primary"
             fill="none"
@@ -273,7 +281,7 @@ function ChatContent() {
 
       {/* Preview iframe */}
       <section className="flex min-w-0 flex-1 flex-col">
-        <div className="flex items-center gap-2 border-b border-border px-4 py-3">
+        <div className="flex h-12 items-center gap-2 border-b border-border px-4">
           <svg
             className="h-4 w-4 text-primary"
             fill="none"
