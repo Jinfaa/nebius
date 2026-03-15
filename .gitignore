@@ -3,3 +3,5 @@ dummy
 tmp
 node_modules
 .ruff_cache
+*.py[cod]
+.pnpm-store
