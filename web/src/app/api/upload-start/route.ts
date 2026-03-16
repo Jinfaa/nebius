@@ -37,7 +37,7 @@ export async function POST(request: NextRequest) {
     execSync(
       `mkdir -p "${iframeDir}" && ` +
         `cd "${iframeDir}" && ` +
-        `pnpm create next-app . --typescript --tailwind --app --src-dir --import-alias "@/*" --use-pnpm --yes`,
+        `pnpm create next-app . --typescript --app --src-dir --import-alias "@/*" --use-pnpm --yes`,
     );
     startIframeDevServer(iframeDir, iframePort);
     try {
